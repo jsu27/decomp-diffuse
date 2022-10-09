@@ -208,12 +208,14 @@ class TrainLoop:
                     k: v[i:i + self.microbatch].to(dist_util.dev())
                     for k, v in self._get_tokens_masks(cond['caption']).items()
                 })
-
+            # TODO check what y is
             if 'y' in cond:
                 if self.dataset == 'clevr_pos':
                     dtype = th.float
                 elif self.dataset == 'clevr_rel':
                     dtype = th.long
+                elif self.dataset == 'clevr':
+                    dtype = th.float
                 else:
                     raise NotImplementedError()
 

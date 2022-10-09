@@ -146,6 +146,35 @@ class ClevrDataset(Dataset):
         else:
             return f'{text_label[0]} {self.label_description[relation]} {text_label[1]}'
 
+"""TODO From comet"""
+import glob
+from imageio import imread
+from skimage.transform import resize as imresize
+
+class Clevr(Dataset):
+    def __init__(self, 
+        # resolution,
+        # data_path,
+        use_captions=False,
+        random_crop=False,
+        random_flip=False,
+    ):
+        # hard code for now
+        self.path = "/om2/user/jocelin/images_clevr/*.png"
+        self.images = sorted(glob(self.path))
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        im_path = self.images[index]
+        im = imread(im_path)
+        im = imresize(im, (64, 64))[:, :, :3]
+
+        im = th.Tensor(im).permute(2, 0, 1)
+
+        out_dict = {"y": index} 
+        return im, out_dict # index
 
 class Clevr2DPosDataset(Dataset):
     def __init__(
@@ -270,6 +299,9 @@ def load_data(
             random_crop=random_crop,
             random_flip=random_flip
         )
+    elif dataset_type == 'clevr':
+        dataset = Clevr()
+        
     elif dataset_type == 'coco':
         # specify the root path and json path
         root = None

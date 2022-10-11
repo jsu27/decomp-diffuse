@@ -382,6 +382,9 @@ class UNetModel(nn.Module):
                                     self.time_embed_dim // 3)
                 self.rel_emb = nn.Embedding(rel_class, self.time_embed_dim // 3)
                 self.null_emb = nn.Embedding(1, self.time_embed_dim)
+            elif self.dataset == 'clevr': 
+                # TODO add latent embedding
+                pass
             else:
                 raise NotImplementedError
 

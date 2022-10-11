@@ -67,7 +67,7 @@ def random_crop_arr(pil_image, image_size, min_crop_frac=0.8, max_crop_frac=1.0)
     return arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size]
 
 
-class ClevrDataset(Dataset):
+class ClevrDataset(Dataset): # object relations
     def __init__(
         self,
         resolution,
@@ -100,7 +100,7 @@ class ClevrDataset(Dataset):
             "front": "in front of",
             "above": "above",
             "below": "below"
-        }
+        } # 4,3,9,3,3,7 --- num_classes is number of classes for each attribute
 
         self.colors = list(colors_to_idx.keys())
         self.shapes = list(shapes_to_idx.keys())
@@ -133,7 +133,7 @@ class ClevrDataset(Dataset):
 
         return np.transpose(arr, [2, 0, 1]), out_dict
 
-    def get_caption(self, label):
+    def get_caption(self, label): # label is numeric indices; this maps to text
         text_label = []
         for i in range(2):
             shape, size, color, material, pos = label[i * 5:i * 5 + 5]
@@ -172,8 +172,10 @@ class Clevr(Dataset):
         im = imresize(im, (64, 64))[:, :, :3]
 
         im = th.Tensor(im).permute(2, 0, 1)
-
+        # TODO in our task, don't need labels or masks
         out_dict = {"y": index} 
+        masks = random.random() > 0.05
+        out_dict.update(dict(masks=masks))
         return im, out_dict # index
 
 class Clevr2DPosDataset(Dataset):
@@ -200,7 +202,7 @@ class Clevr2DPosDataset(Dataset):
 
     def __getitem__(self, index):
         image = Image.fromarray(self.ims[index]).convert('RGB')
-        label = self.labels[index]
+        label = self.labels[index] # should be 2d coord
 
         if self.random_crop:
             arr = random_crop_arr(image, self.resolution)

@@ -283,7 +283,8 @@ def load_data(
 ):
     if not root:
         raise ValueError("unspecified data directory")
-    data_path = download_data(dataset=dataset_type, cache_dir=root)
+    if not dataset_type == 'clevr':
+        data_path = download_data(dataset=dataset_type, cache_dir=root)
 
     if dataset_type == 'clevr_rel':
         dataset = ClevrDataset(

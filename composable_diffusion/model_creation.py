@@ -10,7 +10,7 @@ from composable_diffusion.text2im_model import (
     Text2ImUNet,
 )
 
-from composable_diffusion.unet import UNetModel, SuperResUNetModel
+from composable_diffusion.unet import DecompUNetModel, UNetModel, SuperResUNetModel
 from composable_diffusion.tokenizer.bpe import get_encoder
 
 
@@ -180,6 +180,8 @@ def create_model(
     if raw_unet:
         if super_res:
             model = SuperResUNetModel
+        elif dataset == 'clevr': # new trial model
+            model = DecompUNetModel 
         else:
             model = UNetModel
         return model(

@@ -82,6 +82,7 @@ class TrainLoop:
         if self.use_fp16:
             self._setup_fp16()
 
+        # define model optimizer
         self.opt = AdamW(self.master_params, lr=self.lr, weight_decay=self.weight_decay)
         if self.resume_step:
             self._load_optimizer_state()
@@ -103,7 +104,7 @@ class TrainLoop:
                 output_device=dist_util.dev(),
                 broadcast_buffers=False,
                 bucket_cap_mb=128,
-            )
+            ) # model except with distributed training
         else:
             if dist.get_world_size() > 1:
                 logger.warn(
@@ -166,6 +167,9 @@ class TrainLoop:
                 or self.step + self.resume_step < self.lr_anneal_steps
         ):
             batch, cond = next(self.data)
+            # TODO
+            if self.dataset == 'clevr':
+                pass # don't need condition?
             self.run_step(batch, cond)
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
@@ -180,7 +184,10 @@ class TrainLoop:
             self.save()
 
     def run_step(self, batch, cond):
-        self.forward_backward(batch, cond)
+        if self.dataset == 'clevr':
+            self.forward_backward_latent(batch)
+        else:
+            self.forward_backward(batch, cond)
         if self.use_fp16:
             self.optimize_fp16()
         else:
@@ -196,6 +203,73 @@ class TrainLoop:
         ) for tokens in tokens_list]
         tokens, masks = zip(*outputs)
         return dict(tokens=th.tensor(tokens), mask=th.tensor(masks))
+
+    def forward_backward_latent(self, batch):
+        cond = self.ddp_model.embed_latent(batch) # TODO check right config
+        zero_grad(self.model_params)
+        for i in range(0, batch.shape[0], self.microbatch):
+            micro = batch[i:i + self.microbatch].to(dist_util.dev())
+
+            micro_cond = self.ddp_model.embed_latent(micro) # TODO check right config
+            # # cond contains captions
+            # micro_cond = dict()
+            # # if 'caption' in cond:
+            # #     micro_cond.update({
+            # #         k: v[i:i + self.microbatch].to(dist_util.dev())
+            # #         for k, v in self._get_tokens_masks(cond['caption']).items()
+            # #     })
+            # # # TODO check what y is
+            # # if 'y' in cond:
+            # #     if self.dataset == 'clevr_pos':
+            # #         dtype = th.float
+            # #     elif self.dataset == 'clevr_rel':
+            # #         dtype = th.long
+            # #     elif self.dataset == 'clevr':
+            # #         dtype = th.float
+            # #     else:
+            # #         raise NotImplementedError()
+
+            #     # micro_cond['y'] = cond['y'][i:i + self.microbatch].type(dtype).to(dist_util.dev())
+            #     # micro_cond['masks'] = cond['masks'][i:i + self.microbatch].to(dist_util.dev())
+
+            # others = {k: v[i:i + self.microbatch].to(dist_util.dev())
+            #           for k, v in cond.items() if k not in ['caption', 'y']}
+
+            # micro_cond.update(others)
+            last_batch = (i + self.microbatch) >= batch.shape[0]
+            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
+
+            # TODO what is this
+            # training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
+            compute_losses = functools.partial(
+                self.diffusion.training_losses,
+                self.ddp_model, # params for model forward: x, t, latent
+                micro,
+                t,
+                micro_cond
+                # model_kwargs=micro_cond,
+            )
+
+            if last_batch or not self.use_ddp:
+                losses = compute_losses()
+            else:
+                with self.ddp_model.no_sync():
+                    losses = compute_losses()
+
+            if isinstance(self.schedule_sampler, LossAwareSampler):
+                self.schedule_sampler.update_with_local_losses(
+                    t, losses["loss"].detach()
+                )
+
+            loss = (losses["loss"] * weights).mean()
+            log_loss_dict(
+                self.diffusion, t, {k: v * weights for k, v in losses.items()}
+            )
+            if self.use_fp16:
+                loss_scale = 2 ** self.lg_loss_scale
+                (loss * loss_scale).backward()
+            else:
+                loss.backward()
 
     def forward_backward(self, batch, cond):
         zero_grad(self.model_params)

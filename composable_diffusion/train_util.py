@@ -47,6 +47,7 @@ class TrainLoop:
             schedule_sampler=None,
             weight_decay=0.0,
             lr_anneal_steps=0,
+            components=3
     ):
         self.dataset = dataset
         self.model = model
@@ -96,23 +97,26 @@ class TrainLoop:
                 copy.deepcopy(self.master_params) for _ in range(len(self.ema_rate))
             ]
 
-        if th.cuda.is_available():
-            self.use_ddp = True
-            self.ddp_model = DDP(
-                self.model,
-                device_ids=[dist_util.dev()],
-                output_device=dist_util.dev(),
-                broadcast_buffers=False,
-                bucket_cap_mb=128,
-            ) # model except with distributed training
-        else:
-            if dist.get_world_size() > 1:
-                logger.warn(
-                    "Distributed training requires CUDA. "
-                    "Gradients will not be synchronized properly!"
-                )
-            self.use_ddp = False
-            self.ddp_model = self.model
+        # if th.cuda.is_available():
+        #     self.use_ddp = True
+        #     self.ddp_model = DDP(
+        #         self.model,
+        #         device_ids=[dist_util.dev()],
+        #         output_device=dist_util.dev(),
+        #         broadcast_buffers=False,
+        #         bucket_cap_mb=128,
+        #     ) # model except with distributed training
+        # else:
+        #     if dist.get_world_size() > 1:
+        #         logger.warn(
+        #             "Distributed training requires CUDA. "
+        #             "Gradients will not be synchronized properly!"
+        #         )
+        #     self.use_ddp = False
+        #     self.ddp_model = self.model
+        # do not use DDP for now
+        self.use_ddp = False
+        self.ddp_model = self.model
 
     def _load_and_sync_parameters(self):
         resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
@@ -205,12 +209,16 @@ class TrainLoop:
         return dict(tokens=th.tensor(tokens), mask=th.tensor(masks))
 
     def forward_backward_latent(self, batch):
-        cond = self.ddp_model.embed_latent(batch) # TODO check right config
         zero_grad(self.model_params)
         for i in range(0, batch.shape[0], self.microbatch):
             micro = batch[i:i + self.microbatch].to(dist_util.dev())
 
-            micro_cond = self.ddp_model.embed_latent(micro) # TODO check right config
+            micro_latent = self.ddp_model.embed_latent(micro) # TODO check right config
+            # latents = torch.chunk(latent, self.components, dim=1)
+
+            micro_cond = {'latent': micro_latent}
+            # print('micro_latent shape')
+            # print(micro_latent.shape)
             # # cond contains captions
             # micro_cond = dict()
             # # if 'caption' in cond:
@@ -246,8 +254,7 @@ class TrainLoop:
                 self.ddp_model, # params for model forward: x, t, latent
                 micro,
                 t,
-                micro_cond
-                # model_kwargs=micro_cond,
+                model_kwargs=micro_cond,
             )
 
             if last_batch or not self.use_ddp:
@@ -357,9 +364,12 @@ class TrainLoop:
 
     def _log_grad_norm(self):
         sqsum = 0.0
+        
         for p in self.master_params:
-            # if p.grad is not None:
-            sqsum += (p.grad ** 2).sum().item()
+            if p.grad is not None:
+                # if p.grad is not None:
+                sqsum += (p.grad ** 2).sum().item()
+
         logger.logkv_mean("grad_norm", np.sqrt(sqsum))
 
     def _anneal_lr(self):

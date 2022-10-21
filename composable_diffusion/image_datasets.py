@@ -147,7 +147,7 @@ class ClevrDataset(Dataset): # object relations
             return f'{text_label[0]} {self.label_description[relation]} {text_label[1]}'
 
 """TODO From comet"""
-import glob
+from glob import glob
 from imageio import imread
 from skimage.transform import resize as imresize
 

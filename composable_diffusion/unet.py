@@ -917,7 +917,7 @@ class DecompUNetModel(nn.Module):
         self.embed_layer3 = CondResBlockNoLatent(filters=filter_dim, rescale=False, downsample=True)
         
         self.embed_fc1 = nn.Linear(filter_dim, filter_dim)
-        self.embed_fc2 = nn.Linear(filter_dim, latent_dim_expand)
+        self.embed_fc2 = nn.Linear(filter_dim, latent_dim_expand) # TODO dim issues; need to tile input to forward?
 
         # x = self.embed_conv1(im) 
         # x = F.relu(x)
@@ -969,7 +969,7 @@ class DecompUNetModel(nn.Module):
 
         return output
 
-    def forward(self, x, timesteps, latent, y=None, masks=None, layer_idx=None):
+    def forward(self, x, timesteps, latent=None, latent_index=None, y=None, masks=None, layer_idx=None):
         # TODO incorporate latent
         """
         Apply the model to an input batch.
@@ -978,19 +978,40 @@ class DecompUNetModel(nn.Module):
         :param timesteps: a 1-D batch of timesteps.
         :param y: an [N] Tensor of labels, if class-conditional.
         # latents
+
         :param masks: an [N] Tensor of booleans
         :param layer_idx: integer indicates which attribute layer is used
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
-                self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
+        assert latent is not None, "latent must be provided"
+        # assert (y is not None) == (
+        #         self.num_classes is not None
+        # ), "must specify y if and only if the model is class-conditional"
 
+        # TODO tile x and emb, to have dim self.components that matches latent
         hs = []
         # sinusoidal embedding of timesteps
         # Parameters are shared across time, which is specified to the network using the Transformer sinusoidal position embedding
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # embed timestep 
+        time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # embed timestep 
+        if latent_index is None:
+            s = latent.size()
+            bs = s[0]
+            latent = latent.view(s[0], self.components, -1)
+            time_emb = time_emb[:, None, :].expand(-1, self.components, -1)
+            x = x[:, None, :].expand(-1, self.components, -1, -1, -1)
+            x = th.flatten(x, 0, 1)
 
+
+            time_emb = th.flatten(time_emb, 0, 1)
+            latent = th.flatten(latent, 0, 1)
+            # import pdb
+            # # pdb.set_trace()
+            # print(time_emb.size()) # 48 x 768
+            # print(latent.size())
+        else:
+            # take given slice
+            latent = latent[:, self.latent_dim * latent_index: self.latent_dim * (latent_index + 1)]
+        # time_emb = time_emb.tile(self.components)
         # if self.num_classes:
         #     # assert y.shape == (x.shape[0],)   # assert for discrete class labels
         #     # add label embedding, into timestep embedding
@@ -1014,15 +1035,21 @@ class DecompUNetModel(nn.Module):
         #         emb = emb + label_emb
         #     else:
         #         raise NotImplementedError
-        emb += latent
+        # embed = time_emb + latent # vector of length latent dim x components 
         # latent embedding: we want latent encoder for this model. 
+        
+        # emb_chunked = th.chunk(embed, self.components)
 
-        # TODO think about this
-        # add in the latent embedding to timestep embedding...
-
+        # embed = embed.reshape((-1, self.components)) # reshape to N x components x latent_dim
+        # import pdb; pdb.set_trace()
+        emb = time_emb + latent
 
         h = x.type(self.dtype)
+        # output = 0
+        # for emb in emb_chunked:
         for module in self.input_blocks:
+            # import pdb; pdb.set_trace()
+
             h = module(h, emb) # each module already takes in embedding from timestep
             hs.append(h)
         h = self.middle_block(h, emb)
@@ -1030,7 +1057,15 @@ class DecompUNetModel(nn.Module):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
         h = h.type(x.dtype)
-        return self.out(h)
+        o = self.out(h)
+        s = o.size()
+        if latent_index is None:
+            o = o.view(bs, -1, *s[1:]).mean(dim=1)
+        # import pdb; pdb.set_trace()
+        # print(o.size())
+        # output += o
+
+        return o
 
         # # TODO update
         # # timestep embedding separate from latent embedding, or add together?

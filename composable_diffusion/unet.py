@@ -966,11 +966,10 @@ class DecompUNetModel(nn.Module):
         output = self.embed_fc1(x)
         x = F.relu(self.embed_fc1(x))
         output = self.embed_fc2(x)
-
+        # import pdb; pdb.set_trace() # see what latent looks like
         return output
 
     def forward(self, x, timesteps, latent=None, latent_index=None, y=None, masks=None, layer_idx=None):
-        # TODO incorporate latent
         """
         Apply the model to an input batch.
 
@@ -1000,7 +999,6 @@ class DecompUNetModel(nn.Module):
             time_emb = time_emb[:, None, :].expand(-1, self.components, -1)
             x = x[:, None, :].expand(-1, self.components, -1, -1, -1)
             x = th.flatten(x, 0, 1)
-
 
             time_emb = th.flatten(time_emb, 0, 1)
             latent = th.flatten(latent, 0, 1)
@@ -1042,14 +1040,13 @@ class DecompUNetModel(nn.Module):
 
         # embed = embed.reshape((-1, self.components)) # reshape to N x components x latent_dim
         # import pdb; pdb.set_trace()
+
         emb = time_emb + latent
 
         h = x.type(self.dtype)
-        # output = 0
-        # for emb in emb_chunked:
+
         for module in self.input_blocks:
             # import pdb; pdb.set_trace()
-
             h = module(h, emb) # each module already takes in embedding from timestep
             hs.append(h)
         h = self.middle_block(h, emb)
@@ -1064,44 +1061,7 @@ class DecompUNetModel(nn.Module):
         # import pdb; pdb.set_trace()
         # print(o.size())
         # output += o
-
         return o
-
-        # # TODO update
-        # # timestep embedding separate from latent embedding, or add together?
-        # # for timestep & condition label embed, added together
-        # # let's try separate first
-        
-        # if self.pos_embed:
-        #     b = x.size(0)
-        #     x_grid = self.x_grid.expand(b, 1, -1, -1).to(x.device)
-        #     y_grid = self.y_grid.expand(b, 1, -1, -1).to(x.device)
-        #     coord_grid = torch.cat([x_grid, y_grid], dim=1)
-
-        # inter = self.conv1(x)
-        # inter = swish(inter)
-
-        # if self.pos_embed:
-        #     pos_inter = self.conv1_embed(coord_grid)
-        #     pos_inter = swish(pos_inter)
-
-        #     inter = torch.cat([inter, pos_inter], dim=1)
-
-
-        # x = self.layer_encode(inter, latent)
-        # x = self.layer1(x, latent)
-
-
-        # x = self.layer2(x, latent)
-        # x = self.layer3(x, latent)
-        # x = self.layer4(x, latent)
-
-        # x = x.mean(dim=2).mean(dim=2)
-        # x = x.view(x.size(0), -1)
-
-        # energy = self.energy_map(x) # nn.Linear(filter_dim * 2, 1)
-
-        # return energy
 
 
 class SuperResUNetModel(UNetModel):

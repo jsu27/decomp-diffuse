@@ -366,6 +366,9 @@ class TrainLoop:
         sqsum = 0.0
         
         for p in self.master_params:
+            if p.grad is None:
+                continue
+                #import pdb; pdb.set_trace()
             if p.grad is not None:
                 # if p.grad is not None:
                 sqsum += (p.grad ** 2).sum().item()

@@ -51,6 +51,8 @@ def main():
     )
 
     logger.log("training...")
+
+    
     TrainLoop(
         model=model,
         diffusion=diffusion,

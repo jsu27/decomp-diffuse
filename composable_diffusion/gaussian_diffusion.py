@@ -696,19 +696,8 @@ class GaussianDiffusion:
         
         # decomp case
         if self.loss_type == LossType.RECONSTRUCT:
-            # def p_sample(
-            #     self,
-            #     model,
-            #     x,
-            #     t,
-            #     clip_denoised=True,
-            #     denoised_fn=None,
-            #     cond_fn=None,
-            #     model_kwargs=None,
             import pdb; pdb.set_trace()
-            t = th.tensor([self.num_timesteps] * x_start.shape[0]) # denoise for final img
-            reconstructed_imgs = self.p_sample(model, x_start, t, model_kwargs=model_kwargs)
-
+            reconstructed_imgs = self.p_sample_loop(model, model_kwargs=model_kwargs)
             assert reconstructed_imgs.shape == x_start.shape
             terms["mse"] = mean_flat((x_start - reconstructed_imgs) ** 2)
             terms["loss"] = terms["mse"]

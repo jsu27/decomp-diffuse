@@ -248,6 +248,7 @@ def create_gaussian_diffusion(
     predict_xstart=False,
     rescale_timesteps=False,
     rescale_learned_sigmas=False,
+    decomp=False,
     timestep_respacing="",
 ):
     betas = get_named_beta_schedule(noise_schedule, steps)
@@ -255,6 +256,8 @@ def create_gaussian_diffusion(
         loss_type = gd.LossType.RESCALED_KL
     elif rescale_learned_sigmas:
         loss_type = gd.LossType.RESCALED_MSE
+    elif decomp:
+        loss_type = gd.LossType.RECONSTRUCT
     else:
         loss_type = gd.LossType.MSE
     if not timestep_respacing:

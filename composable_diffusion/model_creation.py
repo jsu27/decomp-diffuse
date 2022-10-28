@@ -46,7 +46,8 @@ def model_and_diffusion_defaults():
         rescale_timesteps=False,
         rescale_learned_sigmas=False,
         num_classes="",
-        dataset=""
+        dataset="",
+        decomp=False
     )
 
 
@@ -94,7 +95,8 @@ def create_model_and_diffusion(
     super_res,
     raw_unet,
     num_classes,
-    dataset
+    dataset,
+    decomp
 ):
     model = create_model(
         image_size,
@@ -129,7 +131,8 @@ def create_model_and_diffusion(
         noise_schedule=noise_schedule,
         timestep_respacing=timestep_respacing,
         rescale_timesteps=rescale_timesteps,
-        rescale_learned_sigmas=rescale_learned_sigmas
+        rescale_learned_sigmas=rescale_learned_sigmas,
+        decomp=decomp
     )
     return model, diffusion
 

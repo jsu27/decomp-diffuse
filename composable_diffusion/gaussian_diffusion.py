@@ -697,12 +697,12 @@ class GaussianDiffusion:
         # decomp case
         if self.loss_type == LossType.RECONSTRUCT:
             import pdb; pdb.set_trace()
-            reconstructed_imgs = self.p_sample_loop(model, model_kwargs=model_kwargs)
+            reconstructed_imgs = self.p_sample_loop(model, x_start.shape, model_kwargs=model_kwargs)
             assert reconstructed_imgs.shape == x_start.shape
             terms["mse"] = mean_flat((x_start - reconstructed_imgs) ** 2)
             terms["loss"] = terms["mse"]
             
-            return
+            return terms
 
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:

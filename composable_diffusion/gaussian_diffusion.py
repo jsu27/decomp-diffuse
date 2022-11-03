@@ -406,6 +406,69 @@ class GaussianDiffusion:
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
+    def p_sample_grad(self,
+        model,
+        x,
+        t,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        device=None,
+        progress=False
+        ):
+        if device is None:
+            device = next(model.parameters()).device
+        assert isinstance(shape, (tuple, list))
+        if noise is not None:
+            img = noise
+        else:
+            img = th.randn(*shape, device=device)
+        indices = list(range(self.num_timesteps))[::-1]
+
+        if progress:
+            # Lazy import so that we don't depend on tqdm.
+            from tqdm.auto import tqdm
+
+            indices = tqdm(indices)
+
+        for i in indices:
+            t = th.tensor([i] * shape[0], device=device)
+
+            out = self.p_mean_variance(
+                model,
+                x,
+                t,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                model_kwargs=model_kwargs,
+            )
+            noise = th.randn_like(x)
+            nonzero_mask = (
+                (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
+            )  # no noise when t == 0
+            if cond_fn is not None:
+                out["mean"] = self.condition_mean(cond_fn, out, x, t, model_kwargs=model_kwargs)
+            sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
+            
+            return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+
+            
+            # with th.no_grad():
+            out = self.p_sample(
+                model,
+                img,
+                t,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                cond_fn=cond_fn,
+                model_kwargs=model_kwargs,
+            )
+            img = out["sample"]
+        return img
+
+
     def p_sample_loop(
         self,
         model,
@@ -417,6 +480,7 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
+        enable_grad=False
     ):
         """
         Generate samples from the model.
@@ -448,6 +512,7 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
+            enable_grad=enable_grad
         ):
             final = sample
         return final["sample"]
@@ -463,6 +528,7 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
+        enable_grad=False
     ):
         """
         Generate samples from the model and yield intermediate samples from
@@ -489,8 +555,9 @@ class GaussianDiffusion:
 
         for i in indices:
             t = th.tensor([i] * shape[0], device=device)
-            with th.no_grad():
-                out = self.p_sample(
+            if enable_grad:
+                with th.enable_grad():
+                    out = self.p_sample(
                     model,
                     img,
                     t,
@@ -498,9 +565,22 @@ class GaussianDiffusion:
                     denoised_fn=denoised_fn,
                     cond_fn=cond_fn,
                     model_kwargs=model_kwargs,
-                )
-                yield out
-                img = out["sample"]
+                    )
+                    yield out
+                    img = out["sample"]
+            else:
+                with th.no_grad():
+                    out = self.p_sample(
+                        model,
+                        img,
+                        t,
+                        clip_denoised=clip_denoised,
+                        denoised_fn=denoised_fn,
+                        cond_fn=cond_fn,
+                        model_kwargs=model_kwargs,
+                    )
+                    yield out
+                    img = out["sample"]
 
     def ddim_sample(
         self,
@@ -696,8 +776,8 @@ class GaussianDiffusion:
         
         # decomp case
         if self.loss_type == LossType.RECONSTRUCT:
-            import pdb; pdb.set_trace()
-            reconstructed_imgs = self.p_sample_loop(model, x_start.shape, model_kwargs=model_kwargs)
+            # import pdb; pdb.set_trace()
+            reconstructed_imgs = self.p_sample_loop(model, x_start.shape, model_kwargs=model_kwargs, enable_grad=True)
             assert reconstructed_imgs.shape == x_start.shape
             terms["mse"] = mean_flat((x_start - reconstructed_imgs) ** 2)
             terms["loss"] = terms["mse"]

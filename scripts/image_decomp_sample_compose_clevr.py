@@ -74,9 +74,6 @@ im_path = 'im_10.png'
 im = imread(im_path)
 im = imresize(im, (64, 64))[:, :, :3]
 im = th.Tensor(im).permute(2, 0, 1)[None, :, :, :].contiguous().cuda()
-
-    # im = imresize(im, (128, 128))
-    # im = torch.Tensor(im).permute(2, 0, 1)[None, :, :, :].contiguous().cuda()
 # im = imresize(im, (128, 128))
 # im = torch.Tensor(im).permute(2, 0, 1)[None, :, :, :].contiguous().cuda()
 
@@ -117,29 +114,9 @@ model_kwargs = dict(
 number_images = 4
 all_samples = []
 
-# should get desired real imgs here
+save_dir = f'clevr_{options["image_size"]}_gen_imgs'
 
-for i in range(number_images):
-    # latent = model.embed_latent()
-    samples = diffusion.p_sample_loop(
-        model,
-        (batch_size, 3, options["image_size"], options["image_size"]),
-        device=device,
-        clip_denoised=True,
-        progress=True,
-        model_kwargs=model_kwargs,
-        cond_fn=None,
-    )[:batch_size]
-
-    all_samples.append(samples)
-
-
-samples = ((th.cat(all_samples, dim=0) + 1) * 127.5).round().clamp(0, 255).to(th.uint8).cpu() / 255.
-grid = make_grid(samples, nrow=int(samples.shape[0] ** 0.5), padding=0)
-save_image(grid, f'clevr_{options["image_size"]}_{guidance_scale}.png')
-
-
-def gen_image(model, batch_size, options, device, model_kwargs, number_images=4, desc=''):
+def gen_image(model, batch_size, options, device, model_kwargs, number_images=4, desc='', save_dir=''):
     all_samples = []
 
     # should get desired real imgs here
@@ -157,110 +134,23 @@ def gen_image(model, batch_size, options, device, model_kwargs, number_images=4,
 
         all_samples.append(samples)
 
-
-    samples = ((th.cat(all_samples, dim=0) + 1) * 127.5).round().clamp(0, 255).to(th.uint8).cpu() / 255.
+    samples = th.cat(all_samples, dim=0).cpu() # did not need to rescale bc orig training imgs not rescaled
+    # import pdb; pdb.set_trace()
     grid = make_grid(samples, nrow=int(samples.shape[0] ** 0.5), padding=0)
     if len(desc) > 0:
         desc = '_' + desc
-    save_image(grid, f'clevr_{options["image_size"]}_{guidance_scale}{desc}.png')
+    if len(save_dir) > 0:
+        os.makedirs(save_dir, exist_ok=True)
+        save_dir = save_dir + '/'
+    save_image(grid, f'{save_dir}clevr_{options["image_size"]}_{guidance_scale}{desc}.png')
 
+# should get desired real imgs here
+gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, save_dir=save_dir)
 
-"""
-also want to sample w 1 latent at a time
-"""
+# also want to sample w 1 latent at a time
 num_comps = 3
 latent_dim = latent.shape[1] // num_comps # length of single latent
 for i in range(num_comps):
-    # latent_comp = th.zeros(latent.shape).to(device)
-    # latent_comp[:, i * latent_dim: (i+1) * latent_dim] = latent[:, i * latent_dim: (i+1) * latent_dim] # extract out latent from flattened latent vec
-    # # latent_comp.to(device)
-    # model_kwargs['latent'] = latent_comp
     model_kwargs['latent_index'] = i
-    gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, desc=str(i))
+    gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, desc=str(i), save_dir=save_dir)
 
-
-
-# # import argparse
-# # from models import LatentEBM128
-# # from imageio import imread, get_writer
-# # from skimage.transform import resize as imresize
-# # import torch
-
-
-# def gen_image(latents, FLAGS, models, im_neg, num_steps, idx=None):
-#     """
-#     latents: latent embeddings for concepts
-#     FLAGS: .components: number of concepts
-#     models: list of models per concept
-#     """
-#     im_negs = []
-
-#     im_neg.requires_grad_(requires_grad=True)
-
-#     for i in range(num_steps):
-#         energy = 0
-
-#         for j in range(len(latents)):
-#             if idx is not None and idx != j:
-#                 pass
-#             else:
-#                 ix = j % FLAGS.components
-#                 energy = models[j % FLAGS.components].forward(im_neg, latents[j]) + energy
-
-#         im_grad, = torch.autograd.grad([energy.sum()], [im_neg])
-
-#         im_neg = im_neg - FLAGS.step_lr * im_grad
-
-#         im_neg = torch.clamp(im_neg, 0, 1)
-#         im_negs.append(im_neg)
-#         im_neg = im_neg.detach()
-#         im_neg.requires_grad_()
-
-#     return im_negs
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description='Train EBM model')
-#     parser.add_argument('--im_path', default='im_0.jpg', type=str, help='image to load')
-#     args = parser.parse_args()
-
-#     ckpt = torch.load("celebahq_128.pth")
-#     FLAGS = ckpt['FLAGS']
-#     state_dict = ckpt['model_state_dict_0']
-
-#     model = LatentEBM128(FLAGS, 'celebahq_128').cuda()
-#     model.load_state_dict(state_dict)
-#     models = [model for i in range(4)]
-
-
-#     im = imread(args.im_path)
-#     im = imresize(im, (128, 128))
-#     im = torch.Tensor(im).permute(2, 0, 1)[None, :, :, :].contiguous().cuda()
-
-#     latent = model.embed_latent(im)
-#     latents = torch.chunk(latent, 4, dim=1)
-
-#     im_neg = torch.rand_like(im)
-
-#     FLAGS.step_lr = 200.0
-#     ims = gen_image(latents, FLAGS, models, im_neg, 30)
-
-#     writer = get_writer("im_opt_full.mp4")
-#     for im in ims:
-#         im = im.detach().cpu().numpy()[0]
-#         im = im.transpose((1, 2, 0))
-#         writer.append_data(im)
-
-#     writer.close()
-
-#     for i in range(4):
-#         writer = get_writer("im_opt_{}.mp4".format(i))
-
-#         ims = gen_image(latents, FLAGS, models, im_neg, 30, idx=i)
-
-#         for im in ims:
-#             im = im.detach().cpu().numpy()[0]
-#             im = im.transpose((1, 2, 0))
-#             writer.append_data(im)
-
-#         writer.close()

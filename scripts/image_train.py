@@ -22,7 +22,9 @@ def main():
     use_captions = args.use_captions
 
     dist_util.setup_dist()
-    log_folder = f'./logs_{args.dataset}_{args.image_size}'
+    log_folder = args.log_folder
+    if log_folder is None:
+        log_folder = f'./logs_{args.dataset}_{args.image_size}'
     os.makedirs(log_folder, exist_ok=True)
     logger.configure(log_folder)
 
@@ -89,7 +91,8 @@ def create_argparser():
         use_fp16=False,
         fp16_scale_growth=1e-3,
         dataset="",
-        use_captions=False
+        use_captions=False,
+        log_folder=None
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

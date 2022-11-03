@@ -217,38 +217,9 @@ class TrainLoop:
             # latents = torch.chunk(latent, self.components, dim=1)
 
             micro_cond = {'latent': micro_latent}
-            # print('micro_latent shape')
-            # print(micro_latent.shape)
-            # # cond contains captions
-            # micro_cond = dict()
-            # # if 'caption' in cond:
-            # #     micro_cond.update({
-            # #         k: v[i:i + self.microbatch].to(dist_util.dev())
-            # #         for k, v in self._get_tokens_masks(cond['caption']).items()
-            # #     })
-            # # # TODO check what y is
-            # # if 'y' in cond:
-            # #     if self.dataset == 'clevr_pos':
-            # #         dtype = th.float
-            # #     elif self.dataset == 'clevr_rel':
-            # #         dtype = th.long
-            # #     elif self.dataset == 'clevr':
-            # #         dtype = th.float
-            # #     else:
-            # #         raise NotImplementedError()
-
-            #     # micro_cond['y'] = cond['y'][i:i + self.microbatch].type(dtype).to(dist_util.dev())
-            #     # micro_cond['masks'] = cond['masks'][i:i + self.microbatch].to(dist_util.dev())
-
-            # others = {k: v[i:i + self.microbatch].to(dist_util.dev())
-            #           for k, v in cond.items() if k not in ['caption', 'y']}
-
-            # micro_cond.update(others)
             last_batch = (i + self.microbatch) >= batch.shape[0]
             t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
 
-            # TODO what is this
-            # training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
                 self.ddp_model, # params for model forward: x, t, latent

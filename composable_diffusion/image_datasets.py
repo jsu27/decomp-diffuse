@@ -146,7 +146,6 @@ class ClevrDataset(Dataset): # object relations
         else:
             return f'{text_label[0]} {self.label_description[relation]} {text_label[1]}'
 
-"""TODO From comet"""
 from glob import glob
 from imageio import imread
 from skimage.transform import resize as imresize
@@ -158,9 +157,10 @@ class Clevr(Dataset):
         use_captions=False,
         random_crop=False,
         random_flip=False,
+        single_img=True
     ):
         # hard code for now
-        self.path = "/om2/user/jocelin/images_clevr/*.png"
+        self.path = "/om2/user/jocelin/images_clevr/*.png" if not single_img else "/om2/user/jocelin/clevr_single_image/*.png"
         self.images = sorted(glob(self.path))
 
     def __len__(self):

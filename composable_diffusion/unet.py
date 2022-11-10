@@ -697,7 +697,7 @@ class DecompUNetModel(nn.Module):
             conv_resample=True,
             dims=2,
             num_classes=None,
-            components=3, # TODO related to num_classes
+            components=4, # TODO related to num_classes
             use_checkpoint=False,
             use_fp16=False,
             num_heads=1,
@@ -706,7 +706,8 @@ class DecompUNetModel(nn.Module):
             use_scale_shift_norm=False,
             resblock_updown=False,
             encoder_channels=None,
-            dataset=''
+            dataset='',
+            temperature=1
     ):
         super().__init__()
 
@@ -728,6 +729,7 @@ class DecompUNetModel(nn.Module):
         self.num_heads = num_heads
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
+        self.temperature = temperature
 
         time_embed_dim = model_channels * 4 # TODO what is model_channels? why * 4?
         self.time_embed_dim = time_embed_dim
@@ -900,16 +902,10 @@ class DecompUNetModel(nn.Module):
             zero_module(conv_nd(dims, input_ch, out_channels, 3, padding=1)),
         )
 
-        # TODO check what output means
-        # goal: need to know number of desired latents n
-        # input: tile image n times
-        # output: mean of n predictions
         self.use_fp16 = use_fp16
 
-
-
-        # TODO copy the encoder layers 
-        filter_dim = 64 # TODO check this?
+        # copy the encoder layers 
+        filter_dim = 64 
         latent_dim_expand = self.latent_dim * self.components # TODO params
         self.embed_conv1 = nn.Conv2d(3, filter_dim, kernel_size=3, stride=1, padding=1)
         self.embed_layer1 = CondResBlockNoLatent(filters=filter_dim, rescale=False, downsample=True)
@@ -918,20 +914,6 @@ class DecompUNetModel(nn.Module):
         
         self.embed_fc1 = nn.Linear(filter_dim, filter_dim)
         self.embed_fc2 = nn.Linear(filter_dim, latent_dim_expand) # TODO dim issues; need to tile input to forward?
-
-        # x = self.embed_conv1(im) 
-        # x = F.relu(x)
-        # x = self.embed_layer1(x) # CondResBlockNoLatent(filters=filter_dim, rescale=False, downsample=True)
-        # x = self.embed_layer2(x)
-        # x = self.embed_layer3(x)
-
-
-        # x = x.mean(dim=2).mean(dim=2)
-
-        # x = x.view(x.size(0), -1)
-        # output = self.embed_fc1(x)
-        # x = F.relu(self.embed_fc1(x))
-        # output = self.embed_fc2(x)
 
 
     def convert_to_fp16(self):
@@ -950,7 +932,6 @@ class DecompUNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
-    # TODO add layers to model... right shapes...
     def embed_latent(self, im):
         """Generate latents from given image."""
         x = self.embed_conv1(im) 
@@ -966,10 +947,9 @@ class DecompUNetModel(nn.Module):
         output = self.embed_fc1(x)
         x = F.relu(self.embed_fc1(x))
         output = self.embed_fc2(x)
-        # import pdb; pdb.set_trace() # see what latent looks like
         return output
 
-    def forward(self, x, timesteps, latent=None, latent_index=None, y=None, masks=None, layer_idx=None):
+    def forward(self, x, timesteps, latent=None, latent_index=None, y=None, masks=None, layer_idx=None, temperature=1):
         """
         Apply the model to an input batch.
 
@@ -987,7 +967,6 @@ class DecompUNetModel(nn.Module):
         #         self.num_classes is not None
         # ), "must specify y if and only if the model is class-conditional"
 
-        # TODO tile x and emb, to have dim self.components that matches latent
         hs = []
         # sinusoidal embedding of timesteps
         # Parameters are shared across time, which is specified to the network using the Transformer sinusoidal position embedding
@@ -1009,38 +988,7 @@ class DecompUNetModel(nn.Module):
         else:
             # take given slice
             latent = latent[:, self.latent_dim * latent_index: self.latent_dim * (latent_index + 1)]
-        # time_emb = time_emb.tile(self.components)
-        # if self.num_classes:
-        #     # assert y.shape == (x.shape[0],)   # assert for discrete class labels
-        #     # add label embedding, into timestep embedding
-        #     if self.dataset == 'clevr_pos':
-        #         label_emb = th.empty((y.shape[0], self.time_embed_dim), device=y.device)
-        #         label_emb[masks] = self.label_emb(y[masks])
-        #         # replace null labels with special embeddings
-        #         label_emb[~masks] = self.null_emb.weight[0][None].repeat(label_emb[~masks].shape[0], 1)
-        #         emb = emb + label_emb
-        #     elif self.dataset == 'clevr': # TODO add latent embedding later
-        #         pass
-        #     elif self.dataset == 'clevr_rel':
-        #         assert masks is not None, "masks are not provided for training relational clevr data."
-        #         label_emb = th.empty((y.shape[0], emb.shape[1]), device=y.device)
-        #         label_emb[~masks] = self.null_emb.weight[0][None].repeat(label_emb[~masks].shape[0], 1)
-        #         # embed objects and relations
-        #         obj_emb_1 = self.fc(th.cat([self.obj_emb[i](y[masks][:, i]) for i in range(5)], dim=1))
-        #         obj_emb_2 = self.fc(th.cat([self.obj_emb[i - 5](y[masks][:, i]) for i in range(5, 10)], dim=1))
-        #         rel_emb = self.rel_emb(y[masks][:, -1])
-        #         label_emb[masks] = th.cat((obj_emb_1, obj_emb_2, rel_emb), dim=1)
-        #         emb = emb + label_emb
-        #     else:
-        #         raise NotImplementedError
-        # embed = time_emb + latent # vector of length latent dim x components 
-        # latent embedding: we want latent encoder for this model. 
-        
-        # emb_chunked = th.chunk(embed, self.components)
-
-        # embed = embed.reshape((-1, self.components)) # reshape to N x components x latent_dim
-        # import pdb; pdb.set_trace()
-
+   
         emb = time_emb + latent
 
         h = x.type(self.dtype)
@@ -1061,7 +1009,7 @@ class DecompUNetModel(nn.Module):
         # import pdb; pdb.set_trace()
         # print(o.size())
         # output += o
-        return o
+        return o * temperature
 
 
 class SuperResUNetModel(UNetModel):

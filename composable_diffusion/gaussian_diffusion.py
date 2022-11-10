@@ -253,7 +253,7 @@ class GaussianDiffusion:
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def p_mean_variance(self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None):
+    def p_mean_variance(self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None, learn_sigma=True):
         """
         Apply the model to get p(x_{t-1} | x_t), as well as a prediction of
         the initial x, x_0.
@@ -284,15 +284,21 @@ class GaussianDiffusion:
             model_output, extra = model_output
         else:
             extra = None
+        if learn_sigma:
+            assert model_output.shape == (B, C * 2, *x.shape[2:])
+            model_output, model_var_values = th.split(model_output, C, dim=1)
 
-        assert model_output.shape == (B, C * 2, *x.shape[2:])
-        model_output, model_var_values = th.split(model_output, C, dim=1)
-        min_log = _extract_into_tensor(self.posterior_log_variance_clipped, t, x.shape)
-        max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
-        # The model_var_values is [-1, 1] for [min_var, max_var].
-        frac = (model_var_values + 1) / 2
-        model_log_variance = frac * max_log + (1 - frac) * min_log
-        model_variance = th.exp(model_log_variance)
+            min_log = _extract_into_tensor(self.posterior_log_variance_clipped, t, x.shape)
+            max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
+            # The model_var_values is [-1, 1] for [min_var, max_var].
+            frac = (model_var_values + 1) / 2
+            model_log_variance = frac * max_log + (1 - frac) * min_log
+            model_variance = th.exp(model_log_variance)
+        else:
+            # get beta_t
+            assert t < len(self.betas)
+            model_variance = (th.ones(x.shape) * self.betas[t]).to(t.device)
+            model_log_variance = th.log(model_variance)
 
         def process_xstart(x):
             if denoised_fn is not None:
@@ -307,7 +313,7 @@ class GaussianDiffusion:
 
         pred_xstart = process_xstart(self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output))
         model_mean, _, _ = self.q_posterior_mean_variance(x_start=pred_xstart, x_t=x, t=t)
-
+        # import pdb; pdb.set_trace()
         assert model_mean.shape == model_log_variance.shape == pred_xstart.shape == x.shape
         return {
             "mean": model_mean,
@@ -371,6 +377,8 @@ class GaussianDiffusion:
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
+        learn_sigma=True,
+        noise_std=1
     ):
         """
         Sample x_{t-1} from the model at the given timestep.
@@ -396,8 +404,9 @@ class GaussianDiffusion:
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
+            learn_sigma=learn_sigma
         )
-        noise = th.randn_like(x)
+        noise = th.randn_like(x) * noise_std # reduce noise variance
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
@@ -405,68 +414,6 @@ class GaussianDiffusion:
             out["mean"] = self.condition_mean(cond_fn, out, x, t, model_kwargs=model_kwargs)
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
-
-    def p_sample_grad(self,
-        model,
-        x,
-        t,
-        clip_denoised=True,
-        denoised_fn=None,
-        cond_fn=None,
-        model_kwargs=None,
-        device=None,
-        progress=False
-        ):
-        if device is None:
-            device = next(model.parameters()).device
-        assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = th.randn(*shape, device=device)
-        indices = list(range(self.num_timesteps))[::-1]
-
-        if progress:
-            # Lazy import so that we don't depend on tqdm.
-            from tqdm.auto import tqdm
-
-            indices = tqdm(indices)
-
-        for i in indices:
-            t = th.tensor([i] * shape[0], device=device)
-
-            out = self.p_mean_variance(
-                model,
-                x,
-                t,
-                clip_denoised=clip_denoised,
-                denoised_fn=denoised_fn,
-                model_kwargs=model_kwargs,
-            )
-            noise = th.randn_like(x)
-            nonzero_mask = (
-                (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
-            )  # no noise when t == 0
-            if cond_fn is not None:
-                out["mean"] = self.condition_mean(cond_fn, out, x, t, model_kwargs=model_kwargs)
-            sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
-            
-            return {"sample": sample, "pred_xstart": out["pred_xstart"]}
-
-
-            
-            # with th.no_grad():
-            out = self.p_sample(
-                model,
-                img,
-                t,
-                clip_denoised=clip_denoised,
-                denoised_fn=denoised_fn,
-                cond_fn=cond_fn,
-                model_kwargs=model_kwargs,
-            )
-            img = out["sample"]
-        return img
 
 
     def p_sample_loop(
@@ -480,7 +427,9 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
-        enable_grad=False
+        enable_grad=False,
+        learn_sigma=True,
+        noise_std=1
     ):
         """
         Generate samples from the model.
@@ -512,7 +461,9 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
-            enable_grad=enable_grad
+            enable_grad=enable_grad,
+            learn_sigma=learn_sigma,
+            noise_std=noise_std
         ):
             final = sample
         return final["sample"]
@@ -528,7 +479,9 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
-        enable_grad=False
+        enable_grad=False,
+        learn_sigma=True,
+        noise_std=1
     ):
         """
         Generate samples from the model and yield intermediate samples from
@@ -565,6 +518,8 @@ class GaussianDiffusion:
                     denoised_fn=denoised_fn,
                     cond_fn=cond_fn,
                     model_kwargs=model_kwargs,
+                    learn_sigma=learn_sigma,
+                    noise_std=noise_std
                     )
                     yield out
                     img = out["sample"]
@@ -578,6 +533,8 @@ class GaussianDiffusion:
                         denoised_fn=denoised_fn,
                         cond_fn=cond_fn,
                         model_kwargs=model_kwargs,
+                        learn_sigma=learn_sigma,
+                        noise_std=noise_std
                     )
                     yield out
                     img = out["sample"]
@@ -776,7 +733,6 @@ class GaussianDiffusion:
         
         # decomp case
         if self.loss_type == LossType.RECONSTRUCT:
-            # import pdb; pdb.set_trace()
             reconstructed_imgs = self.p_sample_loop(model, x_start.shape, model_kwargs=model_kwargs, enable_grad=True)
             assert reconstructed_imgs.shape == x_start.shape
             terms["mse"] = mean_flat((x_start - reconstructed_imgs) ** 2)

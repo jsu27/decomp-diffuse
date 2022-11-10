@@ -32,6 +32,9 @@ add_dict_to_argparser(parser, options)
 parser.add_argument('--ckpt_path', required=True)
 parser.add_argument('--latent_index', type=int)
 parser.add_argument('--im_path', type=str, required=True)
+parser.add_argument('--save_dir', type=str, default='clevr_gen_imgs')
+parser.add_argument('--noise_std', type=float, default=1.0)
+
 
 args = parser.parse_args()
 ckpt_path = args.ckpt_path
@@ -40,6 +43,12 @@ del args.ckpt_path
 # del args.latent_index
 im_path = args.im_path
 del args.im_path
+save_dir = args.save_dir
+del args.save_dir
+noise_std = args.noise_std
+del args.noise_std
+# save_dir = f'clevr_{options["image_size"]}_gen_imgs'
+
 
 options = args_to_dict(args, model_and_diffusion_defaults().keys())
 options['dataset'] = 'clevr' # decomp U-Net model
@@ -114,7 +123,7 @@ model_kwargs = dict(
 number_images = 4
 all_samples = []
 
-save_dir = f'clevr_{options["image_size"]}_gen_imgs'
+# save_dir = f'clevr_{options["image_size"]}_gen_imgs'
 
 def gen_image(model, batch_size, options, device, model_kwargs, number_images=4, desc='', save_dir=''):
     all_samples = []
@@ -130,6 +139,8 @@ def gen_image(model, batch_size, options, device, model_kwargs, number_images=4,
             progress=True,
             model_kwargs=model_kwargs,
             cond_fn=None,
+            learn_sigma=options["learn_sigma"],
+            noise_std=noise_std
         )[:batch_size]
 
         all_samples.append(samples)
@@ -139,6 +150,7 @@ def gen_image(model, batch_size, options, device, model_kwargs, number_images=4,
     grid = make_grid(samples, nrow=int(samples.shape[0] ** 0.5), padding=0)
     if len(desc) > 0:
         desc = '_' + desc
+
     if len(save_dir) > 0:
         os.makedirs(save_dir, exist_ok=True)
         save_dir = save_dir + '/'

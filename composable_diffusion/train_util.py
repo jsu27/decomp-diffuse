@@ -47,7 +47,7 @@ class TrainLoop:
             schedule_sampler=None,
             weight_decay=0.0,
             lr_anneal_steps=0,
-            components=3
+            components=3,
     ):
         self.dataset = dataset
         self.model = model

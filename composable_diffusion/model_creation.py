@@ -47,7 +47,8 @@ def model_and_diffusion_defaults():
         rescale_learned_sigmas=False,
         num_classes="",
         dataset="",
-        decomp=False
+        decomp=False,
+        temperature=1,
     )
 
 
@@ -96,7 +97,8 @@ def create_model_and_diffusion(
     raw_unet,
     num_classes,
     dataset,
-    decomp
+    decomp,
+    temperature,
 ):
     model = create_model(
         image_size,
@@ -122,7 +124,9 @@ def create_model_and_diffusion(
         super_res=super_res,
         raw_unet=raw_unet,
         num_classes=num_classes,
-        dataset=dataset
+        dataset=dataset,
+        learn_sigma=learn_sigma,
+        temperature=temperature
     )
     diffusion = create_gaussian_diffusion(
         learn_sigma=learn_sigma,
@@ -161,7 +165,9 @@ def create_model(
     super_res,
     raw_unet,
     num_classes,
-    dataset
+    dataset,
+    learn_sigma,
+    temperature
 ):
     if channel_mult == "":
         if image_size == 256:
@@ -187,10 +193,12 @@ def create_model(
             model = DecompUNetModel 
         else:
             model = UNetModel
+
+        out_channels = 6 if learn_sigma else 3
         return model(
             in_channels=3,
             model_channels=num_channels,
-            out_channels=6,
+            out_channels=out_channels,
             num_res_blocks=num_res_blocks,
             attention_resolutions=tuple(attention_ds),
             dropout=dropout,
@@ -203,7 +211,8 @@ def create_model(
             use_scale_shift_norm=use_scale_shift_norm,
             resblock_updown=resblock_updown,
             encoder_channels=None,
-            dataset=dataset
+            dataset=dataset,
+            temperature=temperature
         )
     else:
         if inpaint and super_res:

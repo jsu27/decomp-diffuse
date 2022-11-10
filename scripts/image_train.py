@@ -92,7 +92,7 @@ def create_argparser():
         fp16_scale_growth=1e-3,
         dataset="",
         use_captions=False,
-        log_folder=None
+        log_folder=None,
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

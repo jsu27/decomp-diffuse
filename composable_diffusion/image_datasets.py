@@ -157,11 +157,13 @@ class Clevr(Dataset):
         use_captions=False,
         random_crop=False,
         random_flip=False,
-        single_img=True
+        num_images=1
     ):
         # hard code for now
-        self.path = "/om2/user/jocelin/images_clevr/*.png" if not single_img else "/om2/user/jocelin/clevr_single_image/*.png"
+        self.path = "/om2/user/jocelin/images_clevr/*.png"
         self.images = sorted(glob(self.path))
+        if num_images is not None:
+            self.images = self.images[:num_images]
 
     def __len__(self):
         return len(self.images)
@@ -283,7 +285,7 @@ def load_data(
 ):
     if not root:
         raise ValueError("unspecified data directory")
-    if not dataset_type == 'clevr':
+    if not dataset_type in ('clevr', 'clevr_test'):
         data_path = download_data(dataset=dataset_type, cache_dir=root)
 
     if dataset_type == 'clevr_rel':
@@ -302,7 +304,7 @@ def load_data(
             random_crop=random_crop,
             random_flip=random_flip
         )
-    elif dataset_type == 'clevr':
+    elif dataset_type == 'clevr' or dataset_type == 'clevr_test':
         dataset = Clevr()
         
     elif dataset_type == 'coco':

@@ -160,7 +160,7 @@ def gen_image(model, batch_size, options, device, model_kwargs, number_images=4,
 gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, save_dir=save_dir)
 
 # also want to sample w 1 latent at a time
-num_comps = 3
+num_comps = model.components
 latent_dim = latent.shape[1] // num_comps # length of single latent
 for i in range(num_comps):
     model_kwargs['latent_index'] = i

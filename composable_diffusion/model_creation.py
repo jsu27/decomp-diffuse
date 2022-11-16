@@ -49,6 +49,7 @@ def model_and_diffusion_defaults():
         dataset="",
         decomp=False,
         temperature=1,
+        components=4
     )
 
 
@@ -99,11 +100,9 @@ def create_model_and_diffusion(
     dataset,
     decomp,
     temperature,
+    components
 ):
-    model = create_model(
-        image_size,
-        num_channels,
-        num_res_blocks,
+    model_kwargs = dict(
         channel_mult=channel_mult,
         attention_resolutions=attention_resolutions,
         num_heads=num_heads,
@@ -126,8 +125,17 @@ def create_model_and_diffusion(
         num_classes=num_classes,
         dataset=dataset,
         learn_sigma=learn_sigma,
-        temperature=temperature
+        temperature=temperature,
+        components=components
     )
+    if dataset == 'clevr':
+        model_kwargs['temperature'] = temperature
+        model_kwargs['components'] = components
+
+    model = create_model(image_size,
+        num_channels,
+        num_res_blocks, **model_kwargs)
+
     diffusion = create_gaussian_diffusion(
         learn_sigma=learn_sigma,
         use_kl=use_kl,
@@ -167,7 +175,8 @@ def create_model(
     num_classes,
     dataset,
     learn_sigma,
-    temperature
+    temperature,
+    components
 ):
     if channel_mult == "":
         if image_size == 256:
@@ -187,15 +196,9 @@ def create_model(
         attention_ds.append(image_size // int(res))
 
     if raw_unet:
-        if super_res:
-            model = SuperResUNetModel
-        elif dataset == 'clevr': # new trial model
-            model = DecompUNetModel 
-        else:
-            model = UNetModel
-
         out_channels = 6 if learn_sigma else 3
-        return model(
+
+        model_kwargs = dict(
             in_channels=3,
             model_channels=num_channels,
             out_channels=out_channels,
@@ -212,8 +215,18 @@ def create_model(
             resblock_updown=resblock_updown,
             encoder_channels=None,
             dataset=dataset,
-            temperature=temperature
         )
+        if super_res:
+            model = SuperResUNetModel
+        elif dataset == 'clevr': # new trial model
+            model = DecompUNetModel 
+            model_kwargs['components'] = components
+            model_kwargs['temperature'] = temperature
+        elif dataset == 'clevr_test': # test normal diffusion model with clevr
+            model = UNetModel
+        else:
+            model = UNetModel
+        return model(**model_kwargs)
     else:
         if inpaint and super_res:
             model_cls = SuperResInpaintText2ImUnet

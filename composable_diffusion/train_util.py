@@ -47,7 +47,6 @@ class TrainLoop:
             schedule_sampler=None,
             weight_decay=0.0,
             lr_anneal_steps=0,
-            components=3,
     ):
         self.dataset = dataset
         self.model = model
@@ -214,7 +213,6 @@ class TrainLoop:
             micro = batch[i:i + self.microbatch].to(dist_util.dev())
 
             micro_latent = self.ddp_model.embed_latent(micro) # TODO check right config
-            # latents = torch.chunk(latent, self.components, dim=1)
 
             micro_cond = {'latent': micro_latent}
             last_batch = (i + self.microbatch) >= batch.shape[0]
@@ -266,7 +264,7 @@ class TrainLoop:
                     dtype = th.float
                 elif self.dataset == 'clevr_rel':
                     dtype = th.long
-                elif self.dataset == 'clevr':
+                elif self.dataset == 'clevr' or self.dataset == 'clevr_test':
                     dtype = th.float
                 else:
                     raise NotImplementedError()

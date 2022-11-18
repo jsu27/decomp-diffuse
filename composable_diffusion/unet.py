@@ -443,7 +443,7 @@ class UNetModel(nn.Module):
                                     self.time_embed_dim // 3)
                 self.rel_emb = nn.Embedding(rel_class, self.time_embed_dim // 3)
                 self.null_emb = nn.Embedding(1, self.time_embed_dim)
-            elif self.dataset == 'clevr': 
+            elif self.dataset in ('clevr', 'clevr_test'): 
                 # TODO add latent embedding
                 pass
             else:
@@ -613,9 +613,10 @@ class UNetModel(nn.Module):
         :param layer_idx: integer indicates which attribute layer is used
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
-                self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
+        # import pdb; pdb.set_trace()
+        # assert (y is not None) == (
+        #         self.num_classes is not None
+        # ), "must specify y if and only if the model is class-conditional"
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # embed timestep 
@@ -629,7 +630,7 @@ class UNetModel(nn.Module):
                 # replace null labels with special embeddings
                 label_emb[~masks] = self.null_emb.weight[0][None].repeat(label_emb[~masks].shape[0], 1)
                 emb = emb + label_emb
-            elif self.dataset == 'clevr': # TODO add latent embedding later
+            elif self.dataset in ('clevr', 'clevr_test'): # TODO add latent embedding later
                 pass
             elif self.dataset == 'clevr_rel':
                 assert masks is not None, "masks are not provided for training relational clevr data."

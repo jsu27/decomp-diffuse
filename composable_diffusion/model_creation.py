@@ -45,7 +45,7 @@ def model_and_diffusion_defaults():
         use_kl=False,
         rescale_timesteps=False,
         rescale_learned_sigmas=False,
-        num_classes="",
+        num_classes=None,
         dataset="",
         decomp=False,
         temperature=1,

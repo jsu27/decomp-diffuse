@@ -164,6 +164,7 @@ class Clevr(Dataset):
         self.images = sorted(glob(self.path))
         if num_images is not None:
             self.images = self.images[:num_images]
+        import pdb; pdb.set_trace()
 
     def __len__(self):
         return len(self.images)

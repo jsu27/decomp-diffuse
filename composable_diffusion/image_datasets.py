@@ -155,6 +155,7 @@ class Clevr2DPosDataset(Dataset):
         use_captions=False,
         random_crop=False,
         random_flip=False,
+        num_images=1
     ):
         self.resolution = resolution
         self.use_captions = use_captions
@@ -165,6 +166,8 @@ class Clevr2DPosDataset(Dataset):
         print(f'loading data from {data_path}...')
         print(f'using {"captions" if use_captions else "numeric labels"}...')
         self.ims, self.labels = data['ims'], data['coords_labels']
+        self.ims = self.ims[0:num_images]
+        self.labels = self.labels[0:num_images]
 
     def __len__(self):
         return self.ims.shape[0]

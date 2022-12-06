@@ -157,14 +157,44 @@ class Clevr(Dataset):
         use_captions=False,
         random_crop=False,
         random_flip=False,
-        num_images=1
+        num_images=None
     ):
         # hard code for now
         self.path = "/om2/user/jocelin/images_clevr/*.png"
         self.images = sorted(glob(self.path))
         if num_images is not None:
             self.images = self.images[:num_images]
-        import pdb; pdb.set_trace()
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        im_path = self.images[index]
+        im = imread(im_path)
+        im = imresize(im, (64, 64))[:, :, :3]
+
+        im = th.Tensor(im).permute(2, 0, 1)
+        # TODO in our task, don't need labels or masks
+        out_dict = {"y": index} 
+        masks = random.random() > 0.05
+        out_dict.update(dict(masks=masks))
+        return im, out_dict # index
+
+
+class ClevrSingle(Dataset):
+    def __init__(self, 
+        # resolution,
+        # data_path,
+        use_captions=False,
+        random_crop=False,
+        random_flip=False,
+        num_images=64
+    ):
+        # hard code for now
+        self.path = "/om2/user/jocelin/clevr_single_image/*.png"
+        self.images = sorted(glob(self.path))
+        if num_images is not None:
+            self.images = self.images[:num_images]
 
     def __len__(self):
         return len(self.images)
@@ -282,7 +312,8 @@ def load_data(
     use_captions=False,
     deterministic=False,
     random_crop=False,
-    random_flip=False
+    random_flip=False,
+    num_images=None
 ):
     if not root:
         raise ValueError("unspecified data directory")
@@ -305,8 +336,10 @@ def load_data(
             random_crop=random_crop,
             random_flip=random_flip
         )
-    elif dataset_type == 'clevr' or dataset_type == 'clevr_test':
-        dataset = Clevr()
+    elif dataset_type == 'clevr':
+        dataset = Clevr(num_images=num_images)
+    elif dataset_type == 'clevr_test':
+        dataset = ClevrSingle()
         
     elif dataset_type == 'coco':
         # specify the root path and json path

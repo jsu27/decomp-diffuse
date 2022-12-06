@@ -40,6 +40,7 @@ def main():
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     logger.log("creating data loader...")
+    num_images = int(args.num_images) if (args.num_images is not None) else None
     data = load_data(
         root=args.data_dir,
         split='train',
@@ -49,7 +50,8 @@ def main():
         use_captions=use_captions,
         deterministic=False,
         random_crop=False,
-        random_flip=False
+        random_flip=False,
+        num_images=num_images
     )
 
     logger.log("training...")
@@ -93,6 +95,7 @@ def create_argparser():
         dataset="",
         use_captions=False,
         log_folder=None,
+        num_images=None
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

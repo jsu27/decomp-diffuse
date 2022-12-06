@@ -25,7 +25,7 @@ device = th.device('cpu' if not has_cuda else 'cuda')
 options = model_and_diffusion_defaults()
 options['use_fp16'] = has_cuda
 options['timestep_respacing'] = '100'  # use 100 diffusion steps for fast sampling
-options['num_classes'] = '2'
+# options['num_classes'] = '2'
 
 parser = argparse.ArgumentParser()
 add_dict_to_argparser(parser, options)
@@ -51,7 +51,7 @@ del args.noise_std
 
 
 options = args_to_dict(args, model_and_diffusion_defaults().keys())
-options['dataset'] = 'clevr_test' # decomp U-Net model
+options['dataset'] = 'clevr_test' # U-Net model
 model, diffusion = create_model_and_diffusion(**options)
 
 model.eval()
@@ -135,7 +135,7 @@ for i in range(number_images):
         device=device,
         clip_denoised=True,
         progress=True,
-        model_kwargs=model_kwargs,
+        # model_kwargs=model_kwargs,
         learn_sigma=options["learn_sigma"],
         cond_fn=None,
     )[:batch_size]

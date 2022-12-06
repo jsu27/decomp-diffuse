@@ -34,6 +34,7 @@ parser.add_argument('--latent_index', type=int)
 parser.add_argument('--im_path', type=str, required=True)
 parser.add_argument('--save_dir', type=str, default='clevr_gen_imgs')
 parser.add_argument('--noise_std', type=float, default=1.0)
+parser.add_argument('--num_images', type=int, default=4)
 
 
 args = parser.parse_args()
@@ -47,6 +48,8 @@ save_dir = args.save_dir
 del args.save_dir
 noise_std = args.noise_std
 del args.noise_std
+num_images = args.num_images
+del args.num_images
 # save_dir = f'clevr_{options["image_size"]}_gen_imgs'
 
 
@@ -120,16 +123,15 @@ model_kwargs = dict(
 # should recreate x
 
 # Sample from the base model.
-number_images = 4
 all_samples = []
 
 # save_dir = f'clevr_{options["image_size"]}_gen_imgs'
 
-def gen_image(model, batch_size, options, device, model_kwargs, number_images=4, desc='', save_dir=''):
+def gen_image(model, batch_size, options, device, model_kwargs, num_images=4, desc='', save_dir=''):
     all_samples = []
 
     # should get desired real imgs here
-    for i in range(number_images):
+    for i in range(num_images):
         # latent = model.embed_latent()
         samples = diffusion.p_sample_loop(
             model,
@@ -157,12 +159,12 @@ def gen_image(model, batch_size, options, device, model_kwargs, number_images=4,
     save_image(grid, f'{save_dir}clevr_{options["image_size"]}_{guidance_scale}{desc}.png')
 
 # should get desired real imgs here
-gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, save_dir=save_dir)
+gen_image(model, batch_size, options, device, model_kwargs, num_images=num_images, save_dir=save_dir)
 
 # also want to sample w 1 latent at a time
 num_comps = model.components
 latent_dim = latent.shape[1] // num_comps # length of single latent
 for i in range(num_comps):
     model_kwargs['latent_index'] = i
-    gen_image(model, batch_size, options, device, model_kwargs, number_images=number_images, desc=str(i), save_dir=save_dir)
+    gen_image(model, batch_size, options, device, model_kwargs, num_images=num_images, desc=str(i), save_dir=save_dir)
 

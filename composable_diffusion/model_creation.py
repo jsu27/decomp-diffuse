@@ -47,7 +47,7 @@ def model_and_diffusion_defaults():
         rescale_learned_sigmas=False,
         num_classes=None,
         dataset="",
-        decomp=False,
+        reconstruct=False,
         temperature=1,
         components=4
     )
@@ -98,7 +98,7 @@ def create_model_and_diffusion(
     raw_unet,
     num_classes,
     dataset,
-    decomp,
+    reconstruct,
     temperature,
     components
 ):
@@ -144,7 +144,7 @@ def create_model_and_diffusion(
         timestep_respacing=timestep_respacing,
         rescale_timesteps=rescale_timesteps,
         rescale_learned_sigmas=rescale_learned_sigmas,
-        decomp=decomp
+        reconstruct=reconstruct
     )
     return model, diffusion
 
@@ -270,7 +270,7 @@ def create_gaussian_diffusion(
     predict_xstart=False,
     rescale_timesteps=False,
     rescale_learned_sigmas=False,
-    decomp=False,
+    reconstruct=False,
     timestep_respacing="",
 ):
     betas = get_named_beta_schedule(noise_schedule, steps)
@@ -278,7 +278,7 @@ def create_gaussian_diffusion(
         loss_type = gd.LossType.RESCALED_KL
     elif rescale_learned_sigmas:
         loss_type = gd.LossType.RESCALED_MSE
-    elif decomp:
+    elif reconstruct:
         loss_type = gd.LossType.RECONSTRUCT
     else:
         loss_type = gd.LossType.MSE

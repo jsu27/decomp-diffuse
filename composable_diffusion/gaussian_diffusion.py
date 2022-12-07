@@ -731,7 +731,7 @@ class GaussianDiffusion:
 
         terms = {}
         
-        # decomp case
+        # reconstruct case
         if self.loss_type == LossType.RECONSTRUCT:
             reconstructed_imgs = self.p_sample_loop(model, x_start.shape, model_kwargs=model_kwargs, enable_grad=True)
             assert reconstructed_imgs.shape == x_start.shape

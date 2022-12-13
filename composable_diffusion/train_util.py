@@ -96,26 +96,27 @@ class TrainLoop:
                 copy.deepcopy(self.master_params) for _ in range(len(self.ema_rate))
             ]
 
-        # if th.cuda.is_available():
-        #     self.use_ddp = True
-        #     self.ddp_model = DDP(
-        #         self.model,
-        #         device_ids=[dist_util.dev()],
-        #         output_device=dist_util.dev(),
-        #         broadcast_buffers=False,
-        #         bucket_cap_mb=128,
-        #     ) # model except with distributed training
-        # else:
-        #     if dist.get_world_size() > 1:
-        #         logger.warn(
-        #             "Distributed training requires CUDA. "
-        #             "Gradients will not be synchronized properly!"
-        #         )
-        #     self.use_ddp = False
-        #     self.ddp_model = self.model
-        # do not use DDP for now
-        self.use_ddp = False
-        self.ddp_model = self.model
+        if th.cuda.is_available():
+            self.use_ddp = True
+            self.ddp_model = DDP(
+                self.model,
+                device_ids=[dist_util.dev()],
+                output_device=dist_util.dev(),
+                broadcast_buffers=False,
+                bucket_cap_mb=128,
+                find_unused_parameters=True # testing
+            ) # model except with distributed training
+        else:
+            if dist.get_world_size() > 1:
+                logger.warn(
+                    "Distributed training requires CUDA. "
+                    "Gradients will not be synchronized properly!"
+                )
+            self.use_ddp = False
+            self.ddp_model = self.model
+        # # do not use DDP for now
+        # self.use_ddp = False
+        # self.ddp_model = self.model
 
     def _load_and_sync_parameters(self):
         resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
@@ -212,18 +213,18 @@ class TrainLoop:
         for i in range(0, batch.shape[0], self.microbatch):
             micro = batch[i:i + self.microbatch].to(dist_util.dev())
 
-            micro_latent = self.ddp_model.embed_latent(micro) # TODO check right config
+            # micro_latent = self.ddp_model.embed_latent(micro) # TODO check right config
 
-            micro_cond = {'latent': micro_latent}
+            # micro_cond = {'latent': micro_latent}
             last_batch = (i + self.microbatch) >= batch.shape[0]
             t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
 
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
-                self.ddp_model, # params for model forward: x, t, latent
+                self.ddp_model, # params for model forward: x, t; forward func modified so if None, generate latent inside
                 micro,
                 t,
-                model_kwargs=micro_cond,
+                # model_kwargs=micro_cond,
             )
 
             if last_batch or not self.use_ddp:

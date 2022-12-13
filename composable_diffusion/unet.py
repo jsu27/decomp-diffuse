@@ -963,7 +963,10 @@ class DecompUNetModel(nn.Module):
         :param layer_idx: integer indicates which attribute layer is used
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert latent is not None, "latent must be provided"
+        # assert latent is not None, "latent must be provided"
+        if latent is None:
+            latent = self.embed_latent(x)
+            
         # assert (y is not None) == (
         #         self.num_classes is not None
         # ), "must specify y if and only if the model is class-conditional"

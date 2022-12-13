@@ -16,6 +16,10 @@ def create_named_schedule_sampler(name, diffusion):
         return UniformSampler(diffusion)
     elif name == "loss-second-moment":
         return LossSecondMomentResampler(diffusion)
+    elif name == "bounded":
+        return BoundedSampler(diffusion)
+    elif name == "loss-second-moment-bounded":
+        return LossSecondMomentResampler(diffusion, lower=0.3, upper=0.7)
     else:
         raise NotImplementedError(f"unknown schedule sampler: {name}")
 
@@ -62,6 +66,17 @@ class UniformSampler(ScheduleSampler):
     def __init__(self, diffusion):
         self.diffusion = diffusion
         self._weights = np.ones([diffusion.num_timesteps])
+
+    def weights(self):
+        return self._weights
+
+class BoundedSampler(ScheduleSampler):
+    def __init__(self, diffusion, lower=.3, upper=.7):
+        self.diffusion = diffusion
+        self._weights = np.zeros([diffusion.num_timesteps])
+        lower_bd = int(diffusion.num_timesteps * lower)
+        upper_bd = int(diffusion.num_timesteps * upper)
+        self._weights[lower_bd:upper_bd] = 1
 
     def weights(self):
         return self._weights
@@ -122,7 +137,7 @@ class LossAwareSampler(ScheduleSampler):
 
 
 class LossSecondMomentResampler(LossAwareSampler):
-    def __init__(self, diffusion, history_per_term=10, uniform_prob=0.001):
+    def __init__(self, diffusion, history_per_term=10, uniform_prob=0.001, lower=0.0, upper=1.0):
         self.diffusion = diffusion
         self.history_per_term = history_per_term
         self.uniform_prob = uniform_prob
@@ -130,14 +145,22 @@ class LossSecondMomentResampler(LossAwareSampler):
             [diffusion.num_timesteps, history_per_term], dtype=np.float64
         )
         self._loss_counts = np.zeros([diffusion.num_timesteps], dtype=np.int)
+        self.lower = lower
+        self.upper = upper
 
     def weights(self):
         if not self._warmed_up():
-            return np.ones([self.diffusion.num_timesteps], dtype=np.float64)
+            lower_bd = int(self.lower * self.diffusion.num_timesteps)
+            upper_bd = int(self.upper * self.diffusion.num_timesteps)
+            weights = np.zeros([self.diffusion.num_timesteps], dtype=np.float64)
+            weights[lower_bd:upper_bd] = 1.0
+            return weights
+            # return np.ones([self.diffusion.num_timesteps], dtype=np.float64)
         weights = np.sqrt(np.mean(self._loss_history ** 2, axis=-1))
         weights /= np.sum(weights)
         weights *= 1 - self.uniform_prob
         weights += self.uniform_prob / len(weights)
+        
         return weights
 
     def update_with_all_losses(self, ts, losses):
